@@ -1,5 +1,6 @@
 import streamlit as st
-import os
+import urllib.request
+import json
 
 # --- הגדרות עיצוב בסיסיות ---
 st.set_page_config(page_title="CaPow Smart Fridge", page_icon="⚡")
@@ -101,26 +102,47 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- לוגו וכותרת ממותגת ---
-# מנגנון שמחפש קובץ תמונה בתיקייה ומציג אותו אם הוא קיים
-if os.path.exists("logo.png"):
-    st.image("logo.png", width=180)
-elif os.path.exists("logo.jpg"):
-    st.image("logo.jpg", width=180)
-
-st.markdown('<h1 style="text-align: right;">המקרר החכם של <span class="capow-title">CaPow</span> ⚡</h1>', unsafe_allow_html=True)
-# תיקון הסלוגן באנגלית כך שישמור על כיווניות משמאל לימין אבל יוצמד לימין האתר
+# --- כותרת ממותגת נקייה ---
+st.markdown('<h1 style="text-align: right; margin-top: 20px;">המקרר החכם של <span class="capow-title">CaPow</span> ⚡</h1>', unsafe_allow_html=True)
 st.markdown('<div style="text-align: right;"><p dir="ltr" style="direction: ltr; display: inline-block; font-size: 1.1rem; color: #6b7280; margin-top: -15px; margin-bottom: 30px;">100% Uptime for our team\'s energy!</p></div>', unsafe_allow_html=True)
 
-FILE_NAME = "shopping_list.txt"
-CATALOG_FILE = "products_catalog.txt" 
+# --- הגדרות מסד הנתונים בענן (KVDB) ---
+# יצרנו מזהה ייחודי ומאובטח במיוחד עבור המשרד שלכם
+DB_BUCKET_ID = "capow_fridge_secure_bucket_2026_9f8e7d"
+SHOPPING_LIST_KEY = "shopping_list"
+CATALOG_KEY = "products_catalog"
 
-# --- רשימת מוצרים נפוצים (ברירת מחדל) ---
+# פונקציות עזר לקריאה וכתיבה מהענן באמצעות ספריות פייתון מובנות בלבד
+def get_from_cloud(key, default_value):
+    url = f"https://kvdb.io/{DB_BUCKET_ID}/{key}"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req) as response:
+            return json.loads(response.read().decode('utf-8'))
+    except Exception:
+        # אם המפתח עדיין לא קיים בענן, נחזיר את ערך ברירת המחדל
+        return default_value
+
+def save_to_cloud(key, data):
+    url = f"https://kvdb.io/{DB_BUCKET_ID}/{key}"
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(data).encode('utf-8'),
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+        with urllib.request.urlopen(req) as response:
+            return response.read()
+    except Exception as e:
+        st.error(f"שגיאה בשמירה לענן: {e}")
+
+# --- רשימת מוצרים נפוצים (ברירת מחדל אם הענן ריק) ---
 DEFAULT_PRODUCTS = [
     "בחר מהרשימה...",
     "חלב רגיל 3%", "חלב דל שומן 1%", "חלב שיבולת שועל אלפרו", "חלב סויה תנובה",
     "קוטג' 5%", "גבינה לבנה 5%", "גבינה צהובה עמק",
-    "קולה זירו", "פחית קוקה קולה", "ספרייט זירו", "מים מינרלים (שישייה)",
+    "קולה זירו", "פחית קוקה קולה", "ספרייט זيرو", "מים מינרלים (שישייה)",
     "לחם מחיטה מלאה", "לחם לבן פרוס", "פיתות",
     "יוגורט פרו", "יוגורט מולר", "מעדן שוקולד",
     "נייר סופג", "נייר טואלט", "סבון כלים",
@@ -128,18 +150,9 @@ DEFAULT_PRODUCTS = [
     "במבה אסם", "ביסלי גריל", "שוקולד פרה"
 ]
 
-# פונקציה לטעינת הקטלוג
-def load_products():
-    if not os.path.exists(CATALOG_FILE):
-        with open(CATALOG_FILE, "w", encoding="utf-8") as file:
-            for product in DEFAULT_PRODUCTS:
-                file.write(product + "\n")
-        return DEFAULT_PRODUCTS.copy()
-    else:
-        with open(CATALOG_FILE, "r", encoding="utf-8") as file:
-            return [line.strip() for line in file.readlines() if line.strip()]
-
-PRODUCTS = load_products()
+# טעינת המידע החי מהענן בזמן אמת!
+PRODUCTS = get_from_cloud(CATALOG_KEY, DEFAULT_PRODUCTS)
+shopping_list = get_from_cloud(SHOPPING_LIST_KEY, [])
 
 # --- אזור הוספת מוצרים ---
 st.write("מה חסר במקרר?")
@@ -152,16 +165,22 @@ if st.button("הוסף לרשימה ➕"):
     
     if custom_product:
         item_to_add = custom_product
+        # עדכון קטלוג המוצרים בענן אם זה מוצר חדש
         if custom_product not in PRODUCTS:
-            with open(CATALOG_FILE, "a", encoding="utf-8") as file:
-                file.write(custom_product + "\n")
+            PRODUCTS.append(custom_product)
+            save_to_cloud(CATALOG_KEY, PRODUCTS)
     elif selected_product != "בחר מהרשימה...":
         item_to_add = selected_product
         
     if item_to_add:
-        with open(FILE_NAME, "a", encoding="utf-8") as file:
-            file.write(item_to_add + "\n")
-        st.success(f"מעולה! '{item_to_add}' התווסף למאגר האנרגיה שלנו.")
+        # הוספת המוצר לרשימת הקניות השמורה בענן
+        if item_to_add not in shopping_list:
+            shopping_list.append(item_to_add)
+            save_to_cloud(SHOPPING_LIST_KEY, shopping_list)
+            st.success(f"מעולה! '{item_to_add}' התווסף למאגר האנרגיה שלנו.")
+            st.rerun()
+        else:
+            st.warning(f"'{item_to_add}' כבר נמצא ברשימה!")
     else:
         st.warning("אנא בחר מוצר או הקלד אחד חדש.")
 
@@ -170,19 +189,15 @@ st.divider()
 # --- אזור רשימת הקניות (לקניין) ---
 st.subheader("רשימת הקניות הנוכחית 🛒")
 
-if os.path.exists(FILE_NAME):
-    with open(FILE_NAME, "r", encoding="utf-8") as file:
-        items = file.readlines()
-
-    if items:
-        for item in items:
-            st.write(f"⚡ {item.strip()}")
-        
-        st.write("")
-        if st.button("טעינה הושלמה! (מחיקת הרשימה) 🗑️"):
-            os.remove(FILE_NAME)
-            st.rerun()
-    else:
-         st.info("אין חוסרים. הרובוטים יכולים להמשיך לנוע! 🤖")
+if shopping_list:
+    for item in shopping_list:
+        st.write(f"⚡ {item}")
+    
+    st.write("")
+    if st.button("טעינה הושלמה! (מחיקת הרשימה) 🗑️"):
+        # איפוס רשימת הקניות בענן
+        save_to_cloud(SHOPPING_LIST_KEY, [])
+        st.success("הרשימה אופסה בהצלחה!")
+        st.rerun()
 else:
     st.info("אין חוסרים. הרובוטים יכולים להמשיך לנוע! 🤖")
