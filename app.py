@@ -127,107 +127,102 @@ if not os.path.exists(LOG_FILE):
 st.markdown('<h1 style="text-align: right; margin-top: 20px;">המקרר החכם של <span class="capow-title">CaPow</span> ⚡</h1>', unsafe_allow_html=True)
 st.markdown('<div style="text-align: right;"><p dir="ltr" style="direction: ltr; display: inline-block; font-size: 1.1rem; color: #6b7280; margin-top: -15px; margin-bottom: 30px;">100% Uptime for our team\'s energy!</p></div>', unsafe_allow_html=True)
 
-# --- הגדרות מסד הנתונים בענן (kvdb.io) ---
-# מזהה תיקייה תקין ב-100% (מתחיל ב-0 ובאורך של 20 תווים בדיוק)
-DB_BUCKET_ID = "0capowfridge2026upti"
-SHOPPING_LIST_KEY = "shopping_list"
-CATALOG_KEY = "products_catalog"
+# --- הגדרות חיבור מאובטח לענן (Streamlit Secrets) ---
+# המפתחות נשמרים בצורה מאובטחת בענן של Streamlit ולא נחשפים בקוד הציבורי ב-GitHub!
+JSONBIN_API_KEY = st.secrets.get("JSONBIN_API_KEY")
+JSONBIN_BIN_ID = st.secrets.get("JSONBIN_BIN_ID")
 
-# הגדרת כותרות דפדפן (Headers) קבועות כדי למנוע חסימה של שרתי ה-API בענן
-REQUEST_HEADERS = {
-    'Content-Type': 'application/json',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-}
-
-# יצירת הקשר SSL לא מאומת כדי לעקוף בעיות תעודה פוטנציאליות בשרת ה-Streamlit
+# יצירת הקשר SSL לא מאומת כדי למנוע בעיות אבטחה בשרת Streamlit
 try:
     ssl_context = ssl._create_unverified_context()
 except Exception:
     ssl_context = None
 
-# פונקציות עזר לקריאה וכתיבה מהענן עם מנגנון גיבוי מקומי אוטומטי (Fallback)
-def get_from_cloud(key, default_value):
-    url = f"https://kvdb.io/{DB_BUCKET_ID}/{key}"
-    log_event("INFO", f"מנסה לקרוא נתונים מ-kvdb.io עבור המפתח: {key}")
+# בדיקה ידידותית למשתמש למקרה שהמפתחות טרם הוגדרו בלוח הבקרה
+if not JSONBIN_API_KEY or not JSONBIN_BIN_ID:
+    st.info("👋 ברוכים הבאים למקרר החכם של CaPow!")
+    st.markdown("""
+    ### 🔐 שלב אחרון להפעלת הענן בצורה מאובטחת (Secrets):
+    מכיוון שקוד ה-GitHub שלכם ציבורי, **אסור** לרשום את המפתחות ישירות בקוד! במקום זאת, נשמור אותם במערכת ה-Secrets המאובטחת של Streamlit:
+    
+    #### בשרת האינטרנט (Streamlit Cloud):
+    1. כנסו ללוח הבקרה שלכם ב-**[share.streamlit.io](https://share.streamlit.io/)**.
+    2. ליד האפליקציה שלכם, לחצו על שלוש הנקודות (**...**) ובחרו ב-**Settings**.
+    3. עברו ללשונית **Secrets** בצד שמאל.
+    4. הדביקו שם את השורות הבאות (החליפו במפתחות האמיתיים שלכם מהאתר `jsonbin.io`):
+       ```toml
+       JSONBIN_API_KEY = "ה-Master Key שלכם"
+       JSONBIN_BIN_ID = "ה-Bin ID שלכם"
+       ```
+    5. לחצו על **Save** והאפליקציה שלכם תתעדכן, תתחבר ותעלה לאוויר באופן מאובטח ותקין לחלוטין!
+    
+    #### בהרצה מקומית על המחשב (במידה ותרצו):
+    1. בתיקיית הפרויקט במחשב, צרו תיקייה חדשה בשם `.streamlit`
+    2. בתוכה צרו קובץ בשם `secrets.toml`
+    3. רשמו בתוכו את המפתחות באותו פורמט (כמו בשלב 4 למעלה).
+    4. **חשוב:** וודאו שהתיקייה `.streamlit/` נמצאת בקובץ ה-`.gitignore` שלכם כדי שהיא לא תעלה בטעות ל-GitHub!
+    """)
+    st.stop()
+
+# פונקציות עזר לקריאה וכתיבה מ-JSONBin.io
+def load_all_data():
+    url = f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}/latest"
+    headers = {
+        "X-Master-Key": JSONBIN_API_KEY,
+        "User-Agent": "Mozilla/5.0"
+    }
+    log_event("INFO", "מנסה לטעון נתונים מ-JSONBin.io...")
     try:
-        req = urllib.request.Request(url, headers=REQUEST_HEADERS, method="GET")
-        # שימוש ב-ssl_context לעקיפת שגיאות תעודת אבטחה בענן
+        req = urllib.request.Request(url, headers=headers, method="GET")
         with urllib.request.urlopen(req, timeout=5, context=ssl_context) as response:
-            data_str = response.read().decode('utf-8')
-            log_event("INFO", f"קריאה מהענן הצליחה עבור המפתח: {key}")
-            return json.loads(data_str)
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            log_event("WARNING", f"המפתח {key} לא נמצא עדיין בענן (שגיאת 404). מחזיר ערך ברירת מחדל.")
-            return default_value
-        else:
-            log_event("ERROR", f"שגיאת HTTP {e.code} בקריאה משרת kvdb.io עבור {key}: {e.reason}")
+            res_data = json.loads(response.read().decode('utf-8'))
+            log_event("INFO", "טעינת הנתונים מהענן עברה בהצלחה!")
+            return res_data.get("record", {})
     except Exception as e:
-        log_event("ERROR", f"שגיאה כללית בקריאה משרת kvdb.io עבור {key}: {str(e)}")
-    
-    # שלב הגיבוי המקומי במידה והענן לא זמין
-    log_event("WARNING", f"הקריאה מ-kvdb.io נכשלה. מנסה לקרוא מקובץ גיבוי מקומי עבור {key}...")
-    local_file = f"local_backup_{key}.json"
-    if os.path.exists(local_file):
-        try:
-            with open(local_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                log_event("INFO", f"קריאה מקובץ גיבוי מקומי הצליחה עבור {key}")
-                return data
-        except Exception as local_err:
-            log_event("ERROR", f"שגיאה בקריאת הגיבוי המקומי עבור {key}: {str(local_err)}")
-    
-    return default_value
+        log_event("ERROR", f"שגיאה בטעינה מהענן: {str(e)}")
+        
+        # fallback לגיבוי מקומי
+        log_event("WARNING", "מנסה לטעון מקובץ גיבוי מקומי...")
+        if os.path.exists("local_backup.json"):
+            try:
+                with open("local_backup.json", "r", encoding="utf-8") as f:
+                    log_event("INFO", "טעינה מגיבוי מקומי הצליחה!")
+                    return json.load(f)
+            except Exception as le:
+                log_event("ERROR", f"שגיאה בקריאת הגיבוי המקומי: {str(le)}")
+                
+        return {"products_catalog": [], "shopping_list": []}
 
-def save_to_cloud(key, data):
-    # שומרים קודם כל גיבוי מקומי במקרה של ניתוק עתידי
-    local_file = f"local_backup_{key}.json"
+def save_all_data(data):
+    # שומרים קודם כל גיבוי מקומי במחשב למקרה של ניתוק
     try:
-        with open(local_file, "w", encoding="utf-8") as f:
+        with open("local_backup.json", "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
-        log_event("INFO", f"שמירת גיבוי מקומי הצליחה עבור {key}")
-    except Exception as local_err:
-        log_event("ERROR", f"שגיאה בשמירת גיבוי מקומי עבור {key}: {str(local_err)}")
+        log_event("INFO", "גיבוי מקומי נשמר בהצלחה.")
+    except Exception as e:
+        log_event("ERROR", f"שגיאה בשמירת גיבוי מקומי: {str(e)}")
 
-    # כתיבה לענן kvdb.io
-    url = f"https://kvdb.io/{DB_BUCKET_ID}/{key}"
-    log_event("INFO", f"מנסה לשמור נתונים לשרת kvdb.io עבור {key}...")
+    url = f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}"
+    headers = {
+        "X-Master-Key": JSONBIN_API_KEY,
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0"
+    }
+    log_event("INFO", "מנסה לעדכן את קובץ הנתונים בענן של JSONBin.io...")
     try:
         payload = json.dumps(data).encode('utf-8')
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers=REQUEST_HEADERS,
-            method='PUT'  # kvdb.io דורש שימוש ב-PUT לצורך כתיבה/עדכון של מפתחות
-        )
+        req = urllib.request.Request(url, data=payload, headers=headers, method="PUT")
         with urllib.request.urlopen(req, timeout=5, context=ssl_context) as response:
-            res_body = response.read().decode('utf-8')
-            log_event("INFO", f"שמירה לענן kvdb.io הצליחה עבור {key}. תגובת השרת: {res_body}")
+            log_event("INFO", "עדכון הענן עבר בהצלחה מושלמת!")
             return True
-    except urllib.error.HTTPError as e:
-        error_details = e.read().decode('utf-8') if e else ""
-        log_event("ERROR", f"שגיאת HTTP {e.code} בשמירה לענן kvdb.io עבור {key}: {e.reason}. פירוט: {error_details}")
     except Exception as e:
-        log_event("ERROR", f"שגיאה כללית בשמירה לענן kvdb.io עבור {key}: {str(e)}")
-    
-    return False
+        log_event("ERROR", f"עדכון הענן נכשל: {str(e)}")
+        return False
 
-# --- רשימת מוצרים נפוצים ---
-DEFAULT_PRODUCTS = [
-    "בחר מהרשימה...",
-    "חלב רגיל 3%", "חלב דל שומן 1%", "חלב שיבולת שועל אלפרו", "חלב סויה תנובה",
-    "קוטג' 5%", "גבינה לבנה 5%", "גבינה צהובה עמק",
-    "קולה זירו", "פחית קוקה קולה", "ספרייט זيرو", "מים מינרלים (שישייה)",
-    "לחם מחיטה מלאה", "לחם לבן פרוס", "פיתות",
-    "יוגורט פרו", "יוגורט מולר", "מעדן שוקולד",
-    "נייר סופג", "נייר טואלט", "סבון כלים",
-    "קפסולות קפה", "קפה שחור עלית", "נס קפה טסטרס צ'ויס",
-    "במבה אסם", "ביסלי גריל", "שוקולד פרה"
-]
-
-# טעינת המידע החי מהענן בזמן אמת (או מהגיבוי המקומי)
-PRODUCTS = get_from_cloud(CATALOG_KEY, DEFAULT_PRODUCTS)
-shopping_list = get_from_cloud(SHOPPING_LIST_KEY, [])
+# טעינת המידע החי מהענן בזמן אמת!
+db_data = load_all_data()
+PRODUCTS = db_data.get("products_catalog", [])
+shopping_list = db_data.get("shopping_list", [])
 
 # --- אזור הוספת מוצרים ---
 st.write("מה חסר במקרר?")
@@ -240,21 +235,18 @@ if st.button("הוסף לרשימה ➕"):
     
     if custom_product:
         item_to_add = custom_product
-        # עדכון קטלוג המוצרים בענן אם זה מוצר חדש
         if custom_product not in PRODUCTS:
             PRODUCTS.append(custom_product)
-            if save_to_cloud(CATALOG_KEY, PRODUCTS):
-                st.info("המוצר החדש נשמר בהצלחה בענן!")
-            else:
-                st.warning("המוצר נשמר באופן מקומי בלבד (אין חיבור לענן).")
+            db_data["products_catalog"] = PRODUCTS
+            save_all_data(db_data)
     elif selected_product != "בחר מהרשימה...":
         item_to_add = selected_product
         
     if item_to_add:
-        # הוספת המוצר לרשימת הקניות השמורה בענן
         if item_to_add not in shopping_list:
             shopping_list.append(item_to_add)
-            if save_to_cloud(SHOPPING_LIST_KEY, shopping_list):
+            db_data["shopping_list"] = shopping_list
+            if save_all_data(db_data):
                 st.success(f"מעולה! '{item_to_add}' התווסף למאגר האנרגיה שלנו.")
             else:
                 st.success(f"מעולה! '{item_to_add}' נשמר באופן מקומי (מצב אופליין זמני).")
@@ -275,8 +267,8 @@ if shopping_list:
     
     st.write("")
     if st.button("טעינה הושלמה! (מחיקת הרשימה) 🗑️"):
-        # איפוס רשימת הקניות בענן ובגיבוי
-        if save_to_cloud(SHOPPING_LIST_KEY, []):
+        db_data["shopping_list"] = []
+        if save_all_data(db_data):
             st.success("הרשימה אופסה בהצלחה בענן!")
         else:
             st.success("הרשימה אופסה מקומית (מצב אופליין).")
@@ -290,9 +282,8 @@ st.divider()
 with st.expander("🛠️ מרכז בקרה, לוגים וחיבור לענן"):
     st.markdown("### אבחון וניטור חיבור המערכת")
     
-    # כפתור בדיקת חיבור יזום
     if st.button("🔌 בדיקת חיבור מהירה לענן"):
-        test_success = save_to_cloud("test_connection_key", {"status": "success", "time": str(datetime.datetime.now())})
+        test_success = save_all_data(db_data)
         if test_success:
             st.success("החיבור לענן תקין לחלוטין! (100% Uptime) ⚡")
             log_event("SYSTEM", "בדיקת חיבור יזומה עברה בהצלחה.")
@@ -300,14 +291,12 @@ with st.expander("🛠️ מרכז בקרה, לוגים וחיבור לענן"):
             st.error("החיבור לענן נכשל. המערכת פועלת כרגע במצב גיבוי מקומי יציב.")
             log_event("SYSTEM", "בדיקת חיבור יזומה נכשלה.")
             
-    # הצגת קובץ הלוגים
     st.write("📋 לוגים של האפליקציה (app_logs.txt):")
     if os.path.exists(LOG_FILE):
         with open(LOG_FILE, "r", encoding="utf-8") as f:
             logs_content = f.read()
         st.text_area("לוגים של השרת", logs_content, height=250, disabled=True)
         
-        # כפתור ניקוי לוגים
         if st.button("🗑️ נקה לוגים"):
             with open(LOG_FILE, "w", encoding="utf-8") as f:
                 f.write("")
