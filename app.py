@@ -107,7 +107,6 @@ st.markdown('<h1 style="text-align: right; margin-top: 20px;">המקרר החכ�
 st.markdown('<div style="text-align: right;"><p dir="ltr" style="direction: ltr; display: inline-block; font-size: 1.1rem; color: #6b7280; margin-top: -15px; margin-bottom: 30px;">100% Uptime for our team\'s energy!</p></div>', unsafe_allow_html=True)
 
 # --- הגדרות מסד הנתונים בענן (KVDB) ---
-# יצרנו מזהה ייחודי ומאובטח במיוחד עבור המשרד שלכם
 DB_BUCKET_ID = "capow_fridge_secure_bucket_2026_9f8e7d"
 SHOPPING_LIST_KEY = "shopping_list"
 CATALOG_KEY = "products_catalog"
@@ -130,7 +129,7 @@ def save_to_cloud(key, data):
             url,
             data=json.dumps(data).encode('utf-8'),
             headers={'Content-Type': 'application/json'},
-            method='POST'
+            method='PUT'  # שינוי מ-POST ל-PUT כדי לתמוך ב-API של KVDB
         )
         with urllib.request.urlopen(req) as response:
             return response.read()
