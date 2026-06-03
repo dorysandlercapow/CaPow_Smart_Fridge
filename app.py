@@ -4,6 +4,7 @@ import urllib.error
 import json
 import os
 import datetime
+import ssl
 
 # --- הגדרות עיצוב בסיסיות ---
 st.set_page_config(page_title="CaPow Smart Fridge", page_icon="⚡")
@@ -127,7 +128,8 @@ st.markdown('<h1 style="text-align: right; margin-top: 20px;">המקרר החכ�
 st.markdown('<div style="text-align: right;"><p dir="ltr" style="direction: ltr; display: inline-block; font-size: 1.1rem; color: #6b7280; margin-top: -15px; margin-bottom: 30px;">100% Uptime for our team\'s energy!</p></div>', unsafe_allow_html=True)
 
 # --- הגדרות מסד הנתונים בענן (kvdb.io) ---
-DB_BUCKET_ID = "capow_fridge_secure_bucket_2026_9f8e7d"
+# מזהה התיקייה שונה למזהה חוקי ותקני של בדיוק 20 תווים באותיות קטנות ומספרים
+DB_BUCKET_ID = "capowfridge2026uptim"
 SHOPPING_LIST_KEY = "shopping_list"
 CATALOG_KEY = "products_catalog"
 
@@ -137,13 +139,20 @@ REQUEST_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 }
 
+# יצירת הקשר SSL לא מאומת כדי לעקוף בעיות תעודה פוטנציאליות בשרת ה-Streamlit
+try:
+    ssl_context = ssl._create_unverified_context()
+except Exception:
+    ssl_context = None
+
 # פונקציות עזר לקריאה וכתיבה מהענן עם מנגנון גיבוי מקומי אוטומטי (Fallback)
 def get_from_cloud(key, default_value):
     url = f"https://kvdb.io/{DB_BUCKET_ID}/{key}"
     log_event("INFO", f"מנסה לקרוא נתונים מ-kvdb.io עבור המפתח: {key}")
     try:
         req = urllib.request.Request(url, headers=REQUEST_HEADERS, method="GET")
-        with urllib.request.urlopen(req, timeout=5) as response:
+        # שימוש ב-ssl_context לעקיפת שגיאות תעודת אבטחה בענן
+        with urllib.request.urlopen(req, timeout=5, context=ssl_context) as response:
             data_str = response.read().decode('utf-8')
             log_event("INFO", f"קריאה מהענן הצליחה עבור המפתח: {key}")
             return json.loads(data_str)
@@ -191,7 +200,7 @@ def save_to_cloud(key, data):
             headers=REQUEST_HEADERS,
             method='PUT'  # kvdb.io דורש שימוש ב-PUT לצורך כתיבה/עדכון של מפתחות
         )
-        with urllib.request.urlopen(req, timeout=5) as response:
+        with urllib.request.urlopen(req, timeout=5, context=ssl_context) as response:
             res_body = response.read().decode('utf-8')
             log_event("INFO", f"שמירה לענן kvdb.io הצליחה עבור {key}. תגובת השרת: {res_body}")
             return True
