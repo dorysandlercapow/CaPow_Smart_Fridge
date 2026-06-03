@@ -14,6 +14,16 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;700;900&display=swap');
 
+    /* העלמת הסרגל העליון של Streamlit לחלוטין (Share, Edit, GitHub, Star) */
+    [data-testid="stHeader"] {
+        display: none !important;
+    }
+    
+    /* העלמת הפוטר המובנה של Streamlit בתחתית הדף */
+    footer {
+        visibility: hidden !important;
+    }
+
     /* הופך את כל האפליקציה לימין-לשמאל ומשנה פונט למודרני */
     .stApp, .stApp > header, .stApp .main {
         direction: rtl;
