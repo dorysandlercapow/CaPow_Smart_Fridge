@@ -128,8 +128,8 @@ st.markdown('<h1 style="text-align: right; margin-top: 20px;">המקרר החכ�
 st.markdown('<div style="text-align: right;"><p dir="ltr" style="direction: ltr; display: inline-block; font-size: 1.1rem; color: #6b7280; margin-top: -15px; margin-bottom: 30px;">100% Uptime for our team\'s energy!</p></div>', unsafe_allow_html=True)
 
 # --- הגדרות מסד הנתונים בענן (kvdb.io) ---
-# מזהה התיקייה שונה למזהה חוקי ותקני של בדיוק 20 תווים באותיות קטנות ומספרים
-DB_BUCKET_ID = "capowfridge2026uptim"
+# מזהה תיקייה תקין ב-100% (מתחיל ב-0 ובאורך של 20 תווים בדיוק)
+DB_BUCKET_ID = "0capowfridge2026upti"
 SHOPPING_LIST_KEY = "shopping_list"
 CATALOG_KEY = "products_catalog"
 
