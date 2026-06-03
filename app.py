@@ -1,6 +1,9 @@
 import streamlit as st
 import urllib.request
+import urllib.error
 import json
+import os
+import datetime
 
 # --- הגדרות עיצוב בסיסיות ---
 st.set_page_config(page_title="CaPow Smart Fridge", page_icon="⚡")
@@ -102,41 +105,100 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- הגדרת מערכת הלוגים המקומית ---
+LOG_FILE = "app_logs.txt"
+
+def log_event(level, message):
+    """רישום אירועים לקובץ לוגים מקומי"""
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_line = f"[{timestamp}] [{level}] {message}\n"
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(log_line)
+    except Exception:
+        pass
+
+# אתחול לוג ראשוני
+if not os.path.exists(LOG_FILE):
+    log_event("SYSTEM", "מערכת הלוגים של CaPow Smart Fridge אותחלה בהצלחה.")
+
 # --- כותרת ממותגת נקייה ---
 st.markdown('<h1 style="text-align: right; margin-top: 20px;">המקרר החכם של <span class="capow-title">CaPow</span> ⚡</h1>', unsafe_allow_html=True)
 st.markdown('<div style="text-align: right;"><p dir="ltr" style="direction: ltr; display: inline-block; font-size: 1.1rem; color: #6b7280; margin-top: -15px; margin-bottom: 30px;">100% Uptime for our team\'s energy!</p></div>', unsafe_allow_html=True)
 
-# --- הגדרות מסד הנתונים בענן (KVDB) ---
+# --- הגדרות מסד הנתונים בענן (Keyvalue.xyz) ---
+# Keyvalue.xyz מאפשר יצירת באקט מבוסס טוקן מותאם אישית באופן מיידי ויציב
 DB_BUCKET_ID = "capow_fridge_secure_bucket_2026_9f8e7d"
 SHOPPING_LIST_KEY = "shopping_list"
 CATALOG_KEY = "products_catalog"
 
-# פונקציות עזר לקריאה וכתיבה מהענן באמצעות ספריות פייתון מובנות בלבד
+# פונקציות עזר לקריאה וכתיבה מהענן עם מנגנון גיבוי מקומי אוטומטי (Fallback)
 def get_from_cloud(key, default_value):
-    url = f"https://kvdb.io/{DB_BUCKET_ID}/{key}"
+    url = f"https://keyvalue.xyz/v1/{DB_BUCKET_ID}/{key}"
+    log_event("INFO", f"מנסה לקרוא נתונים מהענן עבור המפתח: {key}")
     try:
         req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req) as response:
-            return json.loads(response.read().decode('utf-8'))
-    except Exception:
-        # אם המפתח עדיין לא קיים בענן, נחזיר את ערך ברירת המחדל
-        return default_value
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data_str = response.read().decode('utf-8')
+            log_event("INFO", f"קריאה מהענן הצליחה עבור {key}")
+            return json.loads(data_str)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            log_event("WARNING", f"המפתח {key} לא נמצא עדיין בענן (שגיאת 404). מחזיר ערך ברירת מחדל.")
+            return default_value
+        else:
+            log_event("ERROR", f"שגיאת HTTP {e.code} בקריאה מהענן עבור {key}: {e.reason}")
+    except Exception as e:
+        log_event("ERROR", f"שגיאה כללית בקריאה מהענן עבור {key}: {str(e)}")
+    
+    # שלב הגיבוי המקומי במידה והענן לא זמין
+    log_event("WARNING", f"מנסה לקרוא מקובץ גיבוי מקומי עבור {key}")
+    local_file = f"local_backup_{key}.json"
+    if os.path.exists(local_file):
+        try:
+            with open(local_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                log_event("INFO", f"קריאה מקובץ גיבוי מקומי הצליחה עבור {key}")
+                return data
+        except Exception as local_err:
+            log_event("ERROR", f"שגיאה בקריאת הגיבוי המקומי עבור {key}: {str(local_err)}")
+    
+    return default_value
 
 def save_to_cloud(key, data):
-    url = f"https://kvdb.io/{DB_BUCKET_ID}/{key}"
+    # שומרים קודם כל גיבוי מקומי במקרה של ניתוק עתידי
+    local_file = f"local_backup_{key}.json"
     try:
+        with open(local_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        log_event("INFO", f"שמירת גיבוי מקומי הצליחה עבור {key}")
+    except Exception as local_err:
+        log_event("ERROR", f"שגיאה בשמירת גיבוי מקומי עבור {key}: {str(local_err)}")
+
+    # כתיבה לענן
+    url = f"https://keyvalue.xyz/v1/{DB_BUCKET_ID}/{key}"
+    log_event("INFO", f"מנסה לשמור נתונים לענן עבור {key}...")
+    try:
+        payload = json.dumps(data).encode('utf-8')
         req = urllib.request.Request(
             url,
-            data=json.dumps(data).encode('utf-8'),
+            data=payload,
             headers={'Content-Type': 'application/json'},
-            method='PUT'  # שינוי מ-POST ל-PUT כדי לתמוך ב-API של KVDB
+            method='POST'  # Keyvalue.xyz משתמש ב-POST לעדכון ויצירה של ערכים
         )
-        with urllib.request.urlopen(req) as response:
-            return response.read()
+        with urllib.request.urlopen(req, timeout=5) as response:
+            res_body = response.read().decode('utf-8')
+            log_event("INFO", f"שמירה לענן הצליחה עבור {key}. תגובת השרת: {res_body}")
+            return True
+    except urllib.error.HTTPError as e:
+        error_details = e.read().decode('utf-8') if e else ""
+        log_event("ERROR", f"שגיאת HTTP {e.code} בשמירה לענן עבור {key}: {e.reason}. פירוט: {error_details}")
     except Exception as e:
-        st.error(f"שגיאה בשמירה לענן: {e}")
+        log_event("ERROR", f"שגיאה כללית בשמירה לענן עבור {key}: {str(e)}")
+    
+    return False
 
-# --- רשימת מוצרים נפוצים (ברירת מחדל אם הענן ריק) ---
+# --- רשימת מוצרים נפוצים (ברירת מחדל אם הענן והגיבוי ריקים) ---
 DEFAULT_PRODUCTS = [
     "בחר מהרשימה...",
     "חלב רגיל 3%", "חלב דל שומן 1%", "חלב שיבולת שועל אלפרו", "חלב סויה תנובה",
@@ -149,7 +211,7 @@ DEFAULT_PRODUCTS = [
     "במבה אסם", "ביסלי גריל", "שוקולד פרה"
 ]
 
-# טעינת המידע החי מהענן בזמן אמת!
+# טעינת המידע החי מהענן בזמן אמת! (עם מנגנון הגיבוי המובנה)
 PRODUCTS = get_from_cloud(CATALOG_KEY, DEFAULT_PRODUCTS)
 shopping_list = get_from_cloud(SHOPPING_LIST_KEY, [])
 
@@ -167,7 +229,10 @@ if st.button("הוסף לרשימה ➕"):
         # עדכון קטלוג המוצרים בענן אם זה מוצר חדש
         if custom_product not in PRODUCTS:
             PRODUCTS.append(custom_product)
-            save_to_cloud(CATALOG_KEY, PRODUCTS)
+            if save_to_cloud(CATALOG_KEY, PRODUCTS):
+                st.info("המוצר החדש נשמר בהצלחה בענן!")
+            else:
+                st.warning("המוצר נשמר באופן מקומי בלבד (אין חיבור לענן).")
     elif selected_product != "בחר מהרשימה...":
         item_to_add = selected_product
         
@@ -175,8 +240,10 @@ if st.button("הוסף לרשימה ➕"):
         # הוספת המוצר לרשימת הקניות השמורה בענן
         if item_to_add not in shopping_list:
             shopping_list.append(item_to_add)
-            save_to_cloud(SHOPPING_LIST_KEY, shopping_list)
-            st.success(f"מעולה! '{item_to_add}' התווסף למאגר האנרגיה שלנו.")
+            if save_to_cloud(SHOPPING_LIST_KEY, shopping_list):
+                st.success(f"מעולה! '{item_to_add}' התווסף למאגר האנרגיה שלנו.")
+            else:
+                st.success(f"מעולה! '{item_to_add}' נשמר באופן מקומי (מצב אופליין זמני).")
             st.rerun()
         else:
             st.warning(f"'{item_to_add}' כבר נמצא ברשימה!")
@@ -194,9 +261,43 @@ if shopping_list:
     
     st.write("")
     if st.button("טעינה הושלמה! (מחיקת הרשימה) 🗑️"):
-        # איפוס רשימת הקניות בענן
-        save_to_cloud(SHOPPING_LIST_KEY, [])
-        st.success("הרשימה אופסה בהצלחה!")
+        # איפוס רשימת הקניות בענן ובגיבוי
+        if save_to_cloud(SHOPPING_LIST_KEY, []):
+            st.success("הרשימה אופסה בהצלחה בענן!")
+        else:
+            st.success("הרשימה אופסה מקומית (מצב אופליין).")
         st.rerun()
 else:
     st.info("אין חוסרים. הרובוטים יכולים להמשיך לנוע! 🤖")
+
+st.divider()
+
+# --- מרכז בקרה, בדיקת חיבור ולוגים (למנהל המערכת) ---
+with st.expander("🛠️ מרכז בקרה, לוגים וחיבור לענן"):
+    st.markdown("### אבחון וניטור חיבור המערכת")
+    
+    # כפתור בדיקת חיבור יזום
+    if st.button("🔌 בדיקת חיבור מהירה לענן"):
+        test_success = save_to_cloud("test_connection_key", {"status": "success", "time": str(datetime.datetime.now())})
+        if test_success:
+            st.success("החיבור לענן תקין לחלוטין! (100% Uptime) ⚡")
+            log_event("SYSTEM", "בדיקת חיבור יזומה עברה בהצלחה.")
+        else:
+            st.error("החיבור לענן נכשל. המערכת פועלת כרגע במצב גיבוי מקומי יציב.")
+            log_event("SYSTEM", "בדיקת חיבור יזומה נכשלה.")
+            
+    # הצגת קובץ הלוגים
+    st.write("📋 לוגים של האפליקציה (app_logs.txt):")
+    if os.path.exists(LOG_FILE):
+        with open(LOG_FILE, "r", encoding="utf-8") as f:
+            logs_content = f.read()
+        st.text_area("לוגים של השרת", logs_content, height=250, disabled=True)
+        
+        # כפתור ניקוי לוגים
+        if st.button("🗑️ נקה לוגים"):
+            with open(LOG_FILE, "w", encoding="utf-8") as f:
+                f.write("")
+            st.success("קובץ הלוגים נוקה בהצלחה.")
+            st.rerun()
+    else:
+        st.info("אין לוגים זמינים כרגע.")
