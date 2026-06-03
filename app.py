@@ -276,13 +276,22 @@ if shopping_list:
         st.write(f"⚡ {item}")
     
     st.write("")
+    
+    # הוספת שדה הזנת סיסמה מאובטח למניעת מחיקות בטעות
+    buyer_password = st.text_input("מחיקת הרשימה דורשת סיסמת קניין:", type="password", key="buyer_pwd_input")
+    
     if st.button("טעינה הושלמה! (מחיקת הרשימה) 🗑️"):
-        db_data["shopping_list"] = []
-        if save_all_data(db_data):
-            st.success("הרשימה אופסה בהצלחה בענן!")
+        if buyer_password == "1234":
+            db_data["shopping_list"] = []
+            if save_all_data(db_data):
+                st.success("הרשימה אופסה בהצלחה בענן!")
+            else:
+                st.success("הרשימה אופסה מקומית (מצב אופליין).")
+            st.rerun()
+        elif buyer_password == "":
+            st.warning("נא להזין סיסמה כדי למחוק את הרשימה.")
         else:
-            st.success("הרשימה אופסה מקומית (מצב אופליין).")
-        st.rerun()
+            st.error("סיסמה שגויה! הרשימה לא נמחקה.")
 else:
     st.info("אין חוסרים. הרובוטים יכולים להמשיך לנוע! 🤖")
 
