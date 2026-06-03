@@ -126,33 +126,38 @@ if not os.path.exists(LOG_FILE):
 st.markdown('<h1 style="text-align: right; margin-top: 20px;">המקרר החכם של <span class="capow-title">CaPow</span> ⚡</h1>', unsafe_allow_html=True)
 st.markdown('<div style="text-align: right;"><p dir="ltr" style="direction: ltr; display: inline-block; font-size: 1.1rem; color: #6b7280; margin-top: -15px; margin-bottom: 30px;">100% Uptime for our team\'s energy!</p></div>', unsafe_allow_html=True)
 
-# --- הגדרות מסד הנתונים בענן (Keyvalue.xyz) ---
-# Keyvalue.xyz מאפשר יצירת באקט מבוסס טוקן מותאם אישית באופן מיידי ויציב
+# --- הגדרות מסד הנתונים בענן (kvdb.io) ---
 DB_BUCKET_ID = "capow_fridge_secure_bucket_2026_9f8e7d"
 SHOPPING_LIST_KEY = "shopping_list"
 CATALOG_KEY = "products_catalog"
 
+# הגדרת כותרות דפדפן (Headers) קבועות כדי למנוע חסימה של שרתי ה-API בענן
+REQUEST_HEADERS = {
+    'Content-Type': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+}
+
 # פונקציות עזר לקריאה וכתיבה מהענן עם מנגנון גיבוי מקומי אוטומטי (Fallback)
 def get_from_cloud(key, default_value):
-    url = f"https://keyvalue.xyz/v1/{DB_BUCKET_ID}/{key}"
-    log_event("INFO", f"מנסה לקרוא נתונים מהענן עבור המפתח: {key}")
+    url = f"https://kvdb.io/{DB_BUCKET_ID}/{key}"
+    log_event("INFO", f"מנסה לקרוא נתונים מ-kvdb.io עבור המפתח: {key}")
     try:
-        req = urllib.request.Request(url, method="GET")
+        req = urllib.request.Request(url, headers=REQUEST_HEADERS, method="GET")
         with urllib.request.urlopen(req, timeout=5) as response:
             data_str = response.read().decode('utf-8')
-            log_event("INFO", f"קריאה מהענן הצליחה עבור {key}")
+            log_event("INFO", f"קריאה מהענן הצליחה עבור המפתח: {key}")
             return json.loads(data_str)
     except urllib.error.HTTPError as e:
         if e.code == 404:
             log_event("WARNING", f"המפתח {key} לא נמצא עדיין בענן (שגיאת 404). מחזיר ערך ברירת מחדל.")
             return default_value
         else:
-            log_event("ERROR", f"שגיאת HTTP {e.code} בקריאה מהענן עבור {key}: {e.reason}")
+            log_event("ERROR", f"שגיאת HTTP {e.code} בקריאה משרת kvdb.io עבור {key}: {e.reason}")
     except Exception as e:
-        log_event("ERROR", f"שגיאה כללית בקריאה מהענן עבור {key}: {str(e)}")
+        log_event("ERROR", f"שגיאה כללית בקריאה משרת kvdb.io עבור {key}: {str(e)}")
     
     # שלב הגיבוי המקומי במידה והענן לא זמין
-    log_event("WARNING", f"מנסה לקרוא מקובץ גיבוי מקומי עבור {key}")
+    log_event("WARNING", f"הקריאה מ-kvdb.io נכשלה. מנסה לקרוא מקובץ גיבוי מקומי עבור {key}...")
     local_file = f"local_backup_{key}.json"
     if os.path.exists(local_file):
         try:
@@ -175,30 +180,30 @@ def save_to_cloud(key, data):
     except Exception as local_err:
         log_event("ERROR", f"שגיאה בשמירת גיבוי מקומי עבור {key}: {str(local_err)}")
 
-    # כתיבה לענן
-    url = f"https://keyvalue.xyz/v1/{DB_BUCKET_ID}/{key}"
-    log_event("INFO", f"מנסה לשמור נתונים לענן עבור {key}...")
+    # כתיבה לענן kvdb.io
+    url = f"https://kvdb.io/{DB_BUCKET_ID}/{key}"
+    log_event("INFO", f"מנסה לשמור נתונים לשרת kvdb.io עבור {key}...")
     try:
         payload = json.dumps(data).encode('utf-8')
         req = urllib.request.Request(
             url,
             data=payload,
-            headers={'Content-Type': 'application/json'},
-            method='POST'  # Keyvalue.xyz משתמש ב-POST לעדכון ויצירה של ערכים
+            headers=REQUEST_HEADERS,
+            method='PUT'  # kvdb.io דורש שימוש ב-PUT לצורך כתיבה/עדכון של מפתחות
         )
         with urllib.request.urlopen(req, timeout=5) as response:
             res_body = response.read().decode('utf-8')
-            log_event("INFO", f"שמירה לענן הצליחה עבור {key}. תגובת השרת: {res_body}")
+            log_event("INFO", f"שמירה לענן kvdb.io הצליחה עבור {key}. תגובת השרת: {res_body}")
             return True
     except urllib.error.HTTPError as e:
         error_details = e.read().decode('utf-8') if e else ""
-        log_event("ERROR", f"שגיאת HTTP {e.code} בשמירה לענן עבור {key}: {e.reason}. פירוט: {error_details}")
+        log_event("ERROR", f"שגיאת HTTP {e.code} בשמירה לענן kvdb.io עבור {key}: {e.reason}. פירוט: {error_details}")
     except Exception as e:
-        log_event("ERROR", f"שגיאה כללית בשמירה לענן עבור {key}: {str(e)}")
+        log_event("ERROR", f"שגיאה כללית בשמירה לענן kvdb.io עבור {key}: {str(e)}")
     
     return False
 
-# --- רשימת מוצרים נפוצים (ברירת מחדל אם הענן והגיבוי ריקים) ---
+# --- רשימת מוצרים נפוצים ---
 DEFAULT_PRODUCTS = [
     "בחר מהרשימה...",
     "חלב רגיל 3%", "חלב דל שומן 1%", "חלב שיבולת שועל אלפרו", "חלב סויה תנובה",
@@ -211,7 +216,7 @@ DEFAULT_PRODUCTS = [
     "במבה אסם", "ביסלי גריל", "שוקולד פרה"
 ]
 
-# טעינת המידע החי מהענן בזמן אמת! (עם מנגנון הגיבוי המובנה)
+# טעינת המידע החי מהענן בזמן אמת (או מהגיבוי המקומי)
 PRODUCTS = get_from_cloud(CATALOG_KEY, DEFAULT_PRODUCTS)
 shopping_list = get_from_cloud(SHOPPING_LIST_KEY, [])
 
