@@ -45,37 +45,61 @@ st.markdown("""
         font-weight: 900;
     }
 
-    /* תיקון עבור תיבת הבחירה */
-    div[data-baseweb="select"] {
-        direction: rtl;
+    /* עיצוב קוביות מוצר (Cards) */
+    .product-card {
+        background: white;
+        padding: 15px;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        text-align: center !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        transition: all 0.2s ease-in-out;
+        margin-bottom: 15px;
     }
     
-    /* עיצוב משודרג לשדות טקסט ובחירה */
-    div[data-baseweb="base-input"] > div, div[data-baseweb="select"] > div {
-        border-radius: 10px !important;
-        border: 1.5px solid #d1d5db !important;
-        background-color: #f9fafb !important;
-        transition: all 0.3s ease;
-    }
-    
-    /* אפקט פוקוס (זוהר אנרגטי כחול) */
-    div[data-baseweb="base-input"] > div:focus-within, div[data-baseweb="select"] > div:focus-within {
-        border-color: #4364F7 !important;
-        box-shadow: 0 0 10px rgba(67, 100, 247, 0.2) !important;
-    }
-    
-    /* יישור טקסט בשדות הקלדה */
-    div[data-baseweb="base-input"] input {
-        direction: rtl;
-        font-weight: bold;
+    .product-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 15px -3px rgba(67, 100, 247, 0.1);
+        border-color: #4364F7;
     }
 
-    /* עיצוב כפתורים בסגנון סטארטאפ */
-    .stButton {
-        display: flex;
-        justify-content: flex-start;
+    .product-icon {
+        font-size: 2rem;
+        margin-bottom: 8px;
+        display: block;
+        text-align: center !important;
     }
-    
+
+    .product-name {
+        font-weight: 700;
+        font-size: 1rem;
+        color: #1f2937;
+        margin-bottom: 12px;
+        display: block;
+        text-align: center !important;
+    }
+
+    /* עיצוב כפתורים קומפקטיים בתוך קוביות מוצרים */
+    div.product-card-btn > div > button {
+        background: #f3f4f6 !important;
+        color: #1f2937 !important;
+        border: 1px solid #e5e7eb !important;
+        border-radius: 6px !important;
+        padding: 4px 12px !important;
+        font-size: 0.85rem !important;
+        font-weight: bold !important;
+        width: 100% !important;
+        transition: all 0.2s ease !important;
+    }
+
+    div.product-card-btn > div > button:hover {
+        background: linear-gradient(90deg, #4364F7, #6FB1FC) !important;
+        color: white !important;
+        border-color: transparent !important;
+        box-shadow: 0 4px 10px rgba(67, 100, 247, 0.2) !important;
+    }
+
+    /* עיצוב כפתור מחיקה וניהול ראשי */
     .stButton > button {
         background: linear-gradient(90deg, #4364F7, #6FB1FC) !important;
         color: white !important;
@@ -87,21 +111,31 @@ st.markdown("""
         border-bottom: 3px solid #0052D4 !important;
     }
     
-    /* אפקט ריחוף לכפתור */
     .stButton > button:hover {
         transform: translateY(-2px) !important;
         box-shadow: 0 6px 15px rgba(67, 100, 247, 0.3) !important;
-        border-bottom-width: 3px !important;
         color: white !important;
     }
     
-    .stButton > button:active {
-        transform: translateY(1px) !important;
-        border-bottom-width: 0px !important;
-        box-shadow: none !important;
+    /* עיצוב משודרג ללשוניות (Tabs) */
+    div[data-testid="stTabBar"] {
+        gap: 10px;
     }
     
-    /* עיצוב התראות (ההודעות הירוקות/צהובות) */
+    button[data-baseweb="tab"] {
+        border-radius: 8px !important;
+        padding: 8px 16px !important;
+        background-color: #f3f4f6 !important;
+        font-weight: bold !important;
+        color: #4b5563 !important;
+    }
+    
+    button[data-baseweb="tab"][aria-selected="true"] {
+        background-color: #4364F7 !important;
+        color: white !important;
+    }
+
+    /* עיצוב התראות */
     div[data-testid="stAlert"] {
         direction: rtl;
         border-radius: 10px !important;
@@ -109,7 +143,6 @@ st.markdown("""
         border-left: none !important;
     }
     
-    /* סגנון לקו המפריד */
     hr {
         border-top: 2px dashed #e5e7eb !important;
     }
@@ -135,14 +168,12 @@ if not os.path.exists(LOG_FILE):
 
 # --- כותרת ממותגת נקייה ---
 st.markdown('<h1 style="text-align: right; margin-top: 20px;">המקרר החכם של <span class="capow-title">CaPow</span> ⚡</h1>', unsafe_allow_html=True)
-st.markdown('<div style="text-align: right;"><p dir="ltr" style="direction: ltr; display: inline-block; font-size: 1.1rem; color: #6b7280; margin-top: -15px; margin-bottom: 30px;">100% Uptime for our team\'s energy!</p></div>', unsafe_allow_html=True)
+st.markdown('<div style="text-align: right;"><p dir="ltr" style="direction: ltr; display: inline-block; font-size: 1.1rem; color: #6b7280; margin-top: -15px; margin-bottom: 20px;">100% Uptime for our team\'s energy!</p></div>', unsafe_allow_html=True)
 
 # --- הגדרות חיבור מאובטח לענן (Streamlit Secrets) ---
-# המפתחות נשמרים בצורה מאובטחת בענן של Streamlit ולא נחשפים בקוד הציבורי ב-GitHub!
 JSONBIN_API_KEY = st.secrets.get("JSONBIN_API_KEY")
 JSONBIN_BIN_ID = st.secrets.get("JSONBIN_BIN_ID")
 
-# יצירת הקשר SSL לא מאומת כדי למנוע בעיות אבטחה בשרת Streamlit
 try:
     ssl_context = ssl._create_unverified_context()
 except Exception:
@@ -153,24 +184,12 @@ if not JSONBIN_API_KEY or not JSONBIN_BIN_ID:
     st.info("👋 ברוכים הבאים למקרר החכם של CaPow!")
     st.markdown("""
     ### 🔐 שלב אחרון להפעלת הענן בצורה מאובטחת (Secrets):
-    מכיוון שקוד ה-GitHub שלכם ציבורי, **אסור** לרשום את המפתחות ישירות בקוד! במקום זאת, נשמור אותם במערכת ה-Secrets המאובטחת של Streamlit:
+    מכיוון שקוד ה-GitHub שלכם ציבורי, **אסור** לרשום את המפתחות ישירות בקוד! הגדירו אותם ב-Secrets של Streamlit:
     
-    #### בשרת האינטרנט (Streamlit Cloud):
-    1. כנסו ללוח הבקרה שלכם ב-**[share.streamlit.io](https://share.streamlit.io/)**.
-    2. ליד האפליקציה שלכם, לחצו על שלוש הנקודות (**...**) ובחרו ב-**Settings**.
-    3. עברו ללשונית **Secrets** בצד שמאל.
-    4. הדביקו שם את השורות הבאות (החליפו במפתחות האמיתיים שלכם מהאתר `jsonbin.io`):
-       ```toml
-       JSONBIN_API_KEY = "ה-Master Key שלכם"
-       JSONBIN_BIN_ID = "ה-Bin ID שלכם"
-       ```
-    5. לחצו על **Save** והאפליקציה שלכם תתעדכן, תתחבר ותעלה לאוויר באופן מאובטח ותקין לחלוטין!
-    
-    #### בהרצה מקומית על המחשב (במידה ותרצו):
-    1. בתיקיית הפרויקט במחשב, צרו תיקייה חדשה בשם `.streamlit`
-    2. בתוכה צרו קובץ בשם `secrets.toml`
-    3. רשמו בתוכו את המפתחות באותו פורמט (כמו בשלב 4 למעלה).
-    4. **חשוב:** וודאו שהתיקייה `.streamlit/` נמצאת בקובץ ה-`.gitignore` שלכם כדי שהיא לא תעלה בטעות ל-GitHub!
+    ```toml
+    JSONBIN_API_KEY = "ה-Master Key שלכם"
+    JSONBIN_BIN_ID = "ה-Bin ID שלכם"
+    ```
     """)
     st.stop()
 
@@ -201,7 +220,7 @@ def load_all_data():
             except Exception as le:
                 log_event("ERROR", f"שגיאה בקריאת הגיבוי המקומי: {str(le)}")
                 
-        return {"products_catalog": [], "shopping_list": []}
+        return {"shopping_list": []}
 
 def save_all_data(data):
     # שומרים קודם כל גיבוי מקומי במחשב למקרה של ניתוק
@@ -231,40 +250,103 @@ def save_all_data(data):
 
 # טעינת המידע החי מהענן בזמן אמת!
 db_data = load_all_data()
-PRODUCTS = db_data.get("products_catalog", [])
 shopping_list = db_data.get("shopping_list", [])
 
-# --- אזור הוספת מוצרים ---
-st.write("מה חסר במקרר?")
+# --- קטלוג מובנה ומסווג (נוקשה וממותג ללא הקלדות חופשיות) ---
+CATEGORIZED_CATALOG = {
+    "🥛 מוצרי חלב": [
+        {"name": "חלב רגיל 3%", "icon": "🥛"},
+        {"name": "חלב שיבולת שועל אלפרו", "icon": "🌾"},
+        {"name": "חלב סויה תנובה", "icon": "🫘"},
+        {"name": "קוטג' 5%", "icon": "🧀"},
+        {"name": "גבינה לבנה 5%", "icon": "🥣"},
+        {"name": "גבינה צהובה עמק", "icon": "🧀"},
+        {"name": "יוגורט פרו תנובה", "icon": "🥣"},
+        {"name": "חמאה", "icon": "🧈"}
+    ],
+    "🥤 שתייה קלה": [
+        {"name": "קולה זירו פחיות", "icon": "🥤"},
+        {"name": "קולה זירו בקבוק", "icon": "🍾"},
+        {"name": "מים מינרלים שישייה", "icon": "💧"},
+        {"name": "פחית קוקה קולה", "icon": "🥤"},
+        {"name": "ספרייט זيرو פחית", "icon": "🍋"},
+        {"name": "סודה מארז", "icon": "🫧"},
+        {"name": "בירה שחורה", "icon": "🍺"}
+    ],
+    "🍞 מאפייה ולחם": [
+        {"name": "לחם כוסמין פרוס", "icon": "🍞"},
+        {"name": "לחם לבן פרוס", "icon": "🍞"},
+        {"name": "פיתות מארז", "icon": "🫓"},
+        {"name": "פריכיות אורז", "icon": "🌾"},
+        {"name": "לחמניות", "icon": "🥖"}
+    ],
+    "🥨 נשנושים וקפה": [
+        {"name": "קפסולות קפה", "icon": "☕"},
+        {"name": "במבה אסם", "icon": "🥜"},
+        {"name": "ביסלי גריל", "icon": "🥨"},
+        {"name": "חטיפי אנרגיה", "icon": "🍫"},
+        {"name": "תה ירוק ויסוצקי", "icon": "🍵"},
+        {"name": "שוקולד פרה מריר", "icon": "🍫"},
+        {"name": "שוקולד פרה חלב", "icon": "🍫"},
+        {"name": "קפה טסטרס צ'ויס", "icon": "🫙"}
+    ],
+    "🍎 פירות וירקות": [
+        {"name": "עגבניות", "icon": "🍅"},
+        {"name": "מלפפונים", "icon": "🥒"},
+        {"name": "לימונים", "icon": "🍋"},
+        {"name": "בננות", "icon": "🍌"},
+        {"name": "תפוחים ירוקים", "icon": "🍏"},
+        {"name": "אבוקדו", "icon": "🥑"}
+    ],
+    "🧹 ניקיון ושונות": [
+        {"name": "נייר סופג מארז", "icon": "🧻"},
+        {"name": "סבון כלים פלמוליב", "icon": "🧴"},
+        {"name": "טבליות למדיח", "icon": "🧼"},
+        {"name": "נייר טואלט מארז", "icon": "🧻"},
+        {"name": "כוסות נייר לקפה", "icon": "☕"}
+    ]
+}
 
-selected_product = st.selectbox("חיפוש מוצר קיים:", PRODUCTS)
-custom_product = st.text_input("לא מצאת ברשימה? הקלד כאן (המוצר יישמר לפעמים הבאות):")
+# --- אזור הוספת מוצרים (גריד קוביות מותאם למובייל) ---
+st.markdown("### מה נגמר במקרר? לחצו להוספה מהירה: ⚡")
 
-if st.button("הוסף לרשימה ➕"):
-    item_to_add = ""
-    
-    if custom_product:
-        item_to_add = custom_product
-        if custom_product not in PRODUCTS:
-            PRODUCTS.append(custom_product)
-            db_data["products_catalog"] = PRODUCTS
-            save_all_data(db_data)
-    elif selected_product != "בחר מהרשימה...":
-        item_to_add = selected_product
+# יצירת לשוניות (Tabs) עבור כל קטגוריה
+tab_names = list(CATEGORIZED_CATALOG.keys())
+tabs = st.tabs(tab_names)
+
+for index, tab_name in enumerate(tab_names):
+    with tabs[index]:
+        products_in_cat = CATEGORIZED_CATALOG[tab_name]
         
-    if item_to_add:
-        if item_to_add not in shopping_list:
-            shopping_list.append(item_to_add)
-            db_data["shopping_list"] = shopping_list
-            if save_all_data(db_data):
-                st.success(f"מעולה! '{item_to_add}' התווסף למאגר האנרגיה שלנו.")
-            else:
-                st.success(f"מעולה! '{item_to_add}' נשמר באופן מקומי (מצב אופליין זמני).")
-            st.rerun()
-        else:
-            st.warning(f"'{item_to_add}' כבר נמצא ברשימה!")
-    else:
-        st.warning("אנא בחר מוצר או הקלד אחד חדש.")
+        # יצירת גריד של קוביות (3 עמודות בכל שורה)
+        col_count = 3
+        cols = st.columns(col_count)
+        
+        for i, product in enumerate(products_in_cat):
+            col_index = i % col_count
+            with cols[col_index]:
+                # הצגת קוביית מוצר בעיצוב HTML מותאם אישית
+                st.markdown(f"""
+                <div class="product-card">
+                    <span class="product-icon">{product['icon']}</span>
+                    <span class="product-name">{product['name']}</span>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # כפתור הוספה ייחודי לכל קובייה
+                st.markdown('<div class="product-card-btn">', unsafe_allow_html=True)
+                if st.button(f"הוסף ➕", key=f"btn_{product['name']}"):
+                    item_name = f"{product['icon']} {product['name']}"
+                    
+                    if item_name not in shopping_list:
+                        shopping_list.append(item_name)
+                        db_data["shopping_list"] = shopping_list
+                        save_all_data(db_data)
+                        st.toast(f"✅ '{product['name']}' התווסף בהצלחה!", icon="⚡")
+                        st.rerun()
+                    else:
+                        st.toast(f"⚠️ '{product['name']}' כבר ברשימה!", icon="💡")
+                st.markdown('</div>', unsafe_allow_html=True)
 
 st.divider()
 
@@ -273,7 +355,7 @@ st.subheader("רשימת הקניות הנוכחית 🛒")
 
 if shopping_list:
     for item in shopping_list:
-        st.write(f"⚡ {item}")
+        st.write(f"{item}")
     
     st.write("")
     
@@ -284,9 +366,9 @@ if shopping_list:
         if buyer_password == "1234":
             db_data["shopping_list"] = []
             if save_all_data(db_data):
-                st.success("הרשימה אופסה בהצלחה בענן!")
+                st.toast("הרשימה אופסה בהצלחה בענן! 🧹")
             else:
-                st.success("הרשימה אופסה מקומית (מצב אופליין).")
+                st.toast("הרשימה אופסה מקומית (מצב אופליין).")
             st.rerun()
         elif buyer_password == "":
             st.warning("נא להזין סיסמה כדי למחוק את הרשימה.")
