@@ -131,6 +131,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# אתחול משתנה state כדי למנוע שגיאות מפתח בהרצה ראשונה
+if "user_note" not in st.session_state:
+    st.session_state["user_note"] = ""
+
 # --- הגדרת מערכת הלוגים המקומית ---
 LOG_FILE = "app_logs.txt"
 
@@ -316,16 +320,8 @@ def add_product_to_list(name, emoji):
     else:
         st.warning(f"'{final_item}' כבר קיים ברשימה!")
 
-# --- 1. אזור הוספת מוצרים (הזנת הערה אופציונלית) ---
-st.markdown("### 1. רוצים להוסיף הערה מיוחדת? ✍️")
-st.text_input(
-    "הקלידו כאן הערה (למשל: 'רק חלב שיבולת שועל', '3 יחידות', 'בלי מלח') ואז לחצו על ה-➕ של המוצר הרצוי:",
-    key="user_note",
-    placeholder="הערה אופציונלית למוצר שייבחר..."
-)
-
-st.write("")
-st.markdown("### 2. לחצו על המוצר שחסר במקרר: 👇")
+# --- 1. אזור בחירת מוצרים (הוזז למעלה) ---
+st.markdown("### 1. לחצו על המוצר שחסר במקרר: 👇")
 
 # יצירת לשוניות חלוקה מבוססות קטגוריות
 tabs = st.tabs(list(CATEGORIES.keys()))
@@ -350,6 +346,17 @@ for tab, (cat_name, items) in zip(tabs, CATEGORIES.items()):
                         args=(item['name'], item['emoji']),
                         use_container_width=True
                     )
+
+st.write("")
+st.divider()
+
+# --- 2. אזור הזנת הערה אופציונלית (הוזז למטה) ---
+st.markdown("### 2. רוצים להוסיף הערה מיוחדת? ✍️")
+st.text_input(
+    "הקלידו כאן הערה (למשל: 'רק חלב שיבולת שועל', '3 יחידות', 'בלי מלח') ואז לחצו על ה-➕ של המוצר הרצוי למעלה:",
+    key="user_note",
+    placeholder="הערה אופציונלית למוצר שייבחר..."
+)
 
 st.divider()
 
