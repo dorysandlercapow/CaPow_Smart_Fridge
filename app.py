@@ -159,30 +159,29 @@ st.markdown('<div style="text-align: right;"><p dir="ltr" style="direction: ltr;
 # --- הגדרות חיבור מאובטח לענן (Streamlit Secrets) ---
 JSONBIN_API_KEY = st.secrets.get("JSONBIN_API_KEY")
 JSONBIN_BIN_ID = st.secrets.get("JSONBIN_BIN_ID")
+ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD")
+BUYER_PASSWORD = st.secrets.get("BUYER_PASSWORD")
 
-# יצירת הקשר SSL לא מאומת כדי למנוע בעיות אבטחה בשרת Streamlit
+# יצירת הקשר SSL לא מאומת
 try:
     ssl_context = ssl._create_unverified_context()
 except Exception:
     ssl_context = None
 
 # בדיקה ידידותית למשתמש למקרה שהמפתחות טרם הוגדרו בלוח הבקרה
-if not JSONBIN_API_KEY or not JSONBIN_BIN_ID:
+if not JSONBIN_API_KEY or not JSONBIN_BIN_ID or not ADMIN_PASSWORD or not BUYER_PASSWORD:
     st.info("👋 ברוכים הבאים למקרר החכם של CaPow!")
     st.markdown("""
     ### 🔐 שלב אחרון להפעלת הענן בצורה מאובטחת (Secrets):
-    מכיוון שקוד ה-GitHub שלכם ציבורי, **אסור** לרשום את המפתחות ישירות בקוד! במקום זאת, נשמור אותם במערכת ה-Secrets המאובטחת של Streamlit:
+    יש להגדיר את המפתחות והסיסמאות שלכם ב-Secrets של Streamlit.
+    העתיקו והדביקו את השורות הבאות (עם הערכים שלכם):
     
-    #### בשרת האינטרנט (Streamlit Cloud):
-    1. כנסו ללוח הבקרה שלכם ב-**[share.streamlit.io](https://share.streamlit.io/)**.
-    2. ליד האפליקציה שלכם, לחצו על שלוש הנקודות (**...**) ובחרו ב-**Settings**.
-    3. עברו ללשונית **Secrets** בצד שמאל.
-    4. הדביקו שם את השורות הבאות (החליפו במפתחות האמיתיים שלכם מהאתר `jsonbin.io`):
-       ```toml
-       JSONBIN_API_KEY = "ה-Master Key שלכם"
-       JSONBIN_BIN_ID = "ה-Bin ID שלכם"
-       ```
-    5. לחצו על **Save** והאפליקציה שלכם תתעדכן, תתחבר ותעלה לאוויר באופן מאובטח ותקין לחלוטין!
+    \`\`\`toml
+    JSONBIN_API_KEY = "ה-Master Key שלכם"
+    JSONBIN_BIN_ID = "ה-Bin ID שלכם"
+    ADMIN_PASSWORD = "סיסמה_לניהול_הקטלוג"
+    BUYER_PASSWORD = "סיסמה_למחיקת_העגלה"
+    \`\`\`
     """)
     st.stop()
 
@@ -198,31 +197,23 @@ def load_all_data():
         req = urllib.request.Request(url, headers=headers, method="GET")
         with urllib.request.urlopen(req, timeout=5, context=ssl_context) as response:
             res_data = json.loads(response.read().decode('utf-8'))
-            log_event("INFO", "טעינת הנתונים מהענן עברה בהצלחה!")
             return res_data.get("record", {})
     except Exception as e:
         log_event("ERROR", f"שגיאה בטעינה מהענן: {str(e)}")
-        
-        # fallback לגיבוי מקומי
-        log_event("WARNING", "מנסה לטעון מקובץ גיבוי מקומי...")
         if os.path.exists("local_backup.json"):
             try:
                 with open("local_backup.json", "r", encoding="utf-8") as f:
-                    log_event("INFO", "טעינה מגיבוי מקומי הצליחה!")
                     return json.load(f)
-            except Exception as le:
-                log_event("ERROR", f"שגיאה בקריאת הגיבוי המקומי: {str(le)}")
-                
-        return {"products_catalog": [], "shopping_list": []}
+            except Exception:
+                pass
+        return {}
 
 def save_all_data(data):
-    # שומרים קודם כל גיבוי מקומי במחשב למקרה של ניתוק
     try:
         with open("local_backup.json", "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
-        log_event("INFO", "גיבוי מקומי נשמר בהצלחה.")
-    except Exception as e:
-        log_event("ERROR", f"שגיאה בשמירת גיבוי מקומי: {str(e)}")
+    except Exception:
+        pass
 
     url = f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}"
     headers = {
@@ -230,79 +221,86 @@ def save_all_data(data):
         "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0"
     }
-    log_event("INFO", "מנסה לעדכן את קובץ הנתונים בענן של JSONBin.io...")
     try:
         payload = json.dumps(data).encode('utf-8')
         req = urllib.request.Request(url, data=payload, headers=headers, method="PUT")
         with urllib.request.urlopen(req, timeout=5, context=ssl_context) as response:
-            log_event("INFO", "עדכון הענן עבר בהצלחה מושלמת!")
             return True
     except Exception as e:
         log_event("ERROR", f"עדכון הענן נכשל: {str(e)}")
         return False
 
-# טעינת המידע החי מהענן בזמן אמת!
-db_data = load_all_data()
-shopping_list = db_data.get("shopping_list", [])
-
-# --- קטלוג מוצרים מובנה ומסודר לפי קטגוריות (ללא ניקיון) ---
-CATEGORIES = {
+# קטלוג ברירת מחדל לאתחול (כולל קטגוריה בשרית ואפשרות "אחר" בכל קטגוריה)
+DEFAULT_CATEGORIES = {
     "🥛 מוצרי חלב": [
         {"name": "חלב רגיל 3%", "emoji": "🥛"},
         {"name": "חלב דל שומן 1%", "emoji": "🥛"},
-        {"name": "חלב שיבולת", "emoji": "🌾"},
-        {"name": "חלב סויה", "emoji": "🌱"},
-        {"name": "קוטג'", "emoji": "🧀"},
-        {"name": "גבינה לבנה", "emoji": "🥣"},
-        {"name": "גבינה צהובה עמק", "emoji": "🧀"},
-        {"name": "יוגורט חלבון", "emoji": "🥄"},
-        {"name": "יוגורט אחר (נא להוסיף בהערות)", "emoji": "🍒"},
-        {"name": "אחר (להוסיף בהערות)", "emoji": "🧁"}
+        {"name": "חלב שיבולת שועל", "emoji": "🌾"},
+        {"name": "קוטג' 5%", "emoji": "🧀"},
+        {"name": "גבינה לבנה 5%", "emoji": "🥣"},
+        {"name": "גבינה צהובה", "emoji": "🧀"},
+        {"name": "יוגורט פרו", "emoji": "🥄"},
+        {"name": "אחר", "emoji": "❓"}
+    ],
+    "🥩 בשרי": [
+        {"name": "פסטרמה חזה הודו", "emoji": "🥓"},
+        {"name": "סלמי", "emoji": "🥩"},
+        {"name": "קבנוס", "emoji": "🌭"},
+        {"name": "נקניקיות", "emoji": "🌭"},
+        {"name": "אחר", "emoji": "❓"}
     ],
     "🥤 משקאות": [
         {"name": "קולה זירו", "emoji": "🖤"},
-        {"name": "קוקה קולה", "emoji": "❤️"},
-        {"name": "ספרייט זירו", "emoji": "💚"},
-        {"name": "מים מינרלים (שישייה)", "emoji": "💧"},
+        {"name": "פחית קוקה קולה", "emoji": "❤️"},
+        {"name": "ספרייט", "emoji": "💚"},
+        {"name": "מים מינרלים", "emoji": "💧"},
         {"name": "סודה קרה", "emoji": "🫧"},
-        {"name": "מיץ תפוזים סחוט", "emoji": "🍊"},
-        {"name": "קפה שחור עלית", "emoji": "🤎"},
-        {"name": "אחר (להוסיף בהערות)", "emoji": "🏺"}
+        {"name": "קפסולות קפה", "emoji": "☕"},
+        {"name": "אחר", "emoji": "❓"}
     ],
     "🍞 מאפייה": [
         {"name": "לחם מחיטה מלאה", "emoji": "🍞"},
         {"name": "לחם לבן פרוס", "emoji": "🍞"},
         {"name": "פיתות טריות", "emoji": "🫓"},
-        {"name": "לחמניות", "emoji": "🥯"},
-        {"name": "קרקרים מלוחים", "emoji": "🍪"},
-        {"name": "פריכיות אורז", "emoji": "🍙"}
+        {"name": "אחר", "emoji": "❓"}
     ],
     "🥨 נשנושים ומתוקים": [
-        {"name": "במבה אסם", "emoji": "🥜"},
+        {"name": "במבה", "emoji": "🥜"},
         {"name": "ביסלי גריל", "emoji": "🥨"},
-        {"name": "תפוצ'יפס טבעי", "emoji": "🥔"},
-        {"name": "שוקולד", "emoji": "🍫"},
-        {"name": "עוגיות שוקולד צ'יפס", "emoji": "🍪"},
-        {"name": "ופלים לואקר", "emoji": "🧇"},
-        {"name": "אחר (להוסיף בהערות)", "emoji": "🥜"}
+        {"name": "תפוצ'יפס", "emoji": "🥔"},
+        {"name": "שוקולד פרה", "emoji": "🍫"},
+        {"name": "אחר", "emoji": "❓"}
     ],
     "🍎 ירקות ופירות": [
         {"name": "עגבניות", "emoji": "🍅"},
         {"name": "מלפפונים", "emoji": "🥒"},
-        {"name": "פלפל אדום", "emoji": "🫑"},
-        {"name": "לימון", "emoji": "🍋"},
         {"name": "בננות", "emoji": "🍌"},
-        {"name": "תפוחים ירוקים", "emoji": "🍏"},
-        {"name": "אחר (להוסיף בהערות)", "emoji": "🍉"}
+        {"name": "תפוחים", "emoji": "🍏"},
+        {"name": "אחר", "emoji": "❓"}
     ]
 }
 
-# פונקציית הוספה מהירה עם תמיכה בהערות אישיות
+# טעינת המידע החי מהענן
+db_data = load_all_data()
+shopping_list = db_data.get("shopping_list", [])
+
+# אתחול קטגוריות לענן אם הן עדיין לא קיימות
+if "categories" not in db_data or not db_data["categories"]:
+    db_data["categories"] = DEFAULT_CATEGORIES
+    save_all_data(db_data)
+
+CATEGORIES = db_data["categories"]
+
+# פונקציית הוספה מהירה עם תמיכה בחובת הערה ל"אחר"
 def add_product_to_list(name, emoji):
     note = st.session_state.get("user_note", "").strip()
     
-    # הרכבת שם המוצר הסופי (עם או בלי הערה)
-    final_item = f"{emoji} {name}"
+    # וידוא חובה: אי אפשר לבחור "אחר" בלי לפרט בהערה!
+    if name == "אחר" and not note:
+        st.toast("⚠️ חובה להקליד למטה מה חסר לכם לפני שמוסיפים 'אחר'!", icon="⚠️")
+        return
+        
+    final_item = f"{emoji} {name}" if name != "אחר" else f"{emoji} מוצר אחר"
     if note:
         final_item += f" ({note})"
         
@@ -311,7 +309,6 @@ def add_product_to_list(name, emoji):
         db_data["shopping_list"] = shopping_list
         if save_all_data(db_data):
             st.toast(f"התווסף בהצלחה: {final_item} ⚡", icon="✅")
-            # איפוס תיבת ההערה לאחר הוספה מוצלחת
             st.session_state["user_note"] = ""
             st.rerun()
         else:
@@ -319,25 +316,21 @@ def add_product_to_list(name, emoji):
     else:
         st.warning(f"'{final_item}' כבר קיים ברשימה!")
 
-# --- 1. אזור בחירת מוצרים (הוזז למעלה) ---
+# --- 1. אזור בחירת מוצרים ---
 st.markdown("### 1. לחצו על המוצר שחסר במקרר: 👇")
 
-# יצירת לשוניות חלוקה מבוססות קטגוריות
+# יצירת לשוניות חלוקה מבוססות קטגוריות דינמיות מהענן
 tabs = st.tabs(list(CATEGORIES.keys()))
 
-# בניית הגריד בתוך כל לשונית
 for tab, (cat_name, items) in zip(tabs, CATEGORIES.items()):
     with tab:
-        # חלוקה ל-3 עמודות רספונסיביות
         cols = st.columns(3)
         for idx, item in enumerate(items):
             col = cols[idx % 3]
             with col:
-                # תיבת מוצר מעוצבת ונקייה
                 with st.container(border=True):
                     st.markdown(f"<div style='text-align: center; font-size: 1.15rem; font-weight: bold;'>{item['emoji']} {item['name']}</div>", unsafe_allow_html=True)
                     st.write("")
-                    # כפתור הוספה ייעודי שמריץ קולבק
                     st.button(
                         "הוסף ➕", 
                         key=f"btn_{cat_name}_{item['name']}", 
@@ -349,12 +342,12 @@ for tab, (cat_name, items) in zip(tabs, CATEGORIES.items()):
 st.write("")
 st.divider()
 
-# --- 2. אזור הזנת הערה אופציונלית (הוזז למטה) ---
+# --- 2. אזור הזנת הערה ---
 st.markdown("### 2. רוצים להוסיף הערה מיוחדת? ✍️")
 st.text_input(
-    "הקלידו כאן הערה (למשל: 'רק חלב שיבולת שועל', '3 יחידות', 'בלי מלח') ואז לחצו על ה-➕ של המוצר הרצוי למעלה:",
+    "הקלידו כאן הערה או פירוט למוצר 'אחר' ואז לחצו על ה-➕ למעלה:",
     key="user_note",
-    placeholder="הערה אופציונלית למוצר שייבחר..."
+    placeholder="למשל: 'רק חלב שיבולת שועל', או '3 חבילות קבנוס'..."
 )
 
 st.divider()
@@ -367,19 +360,17 @@ if shopping_list:
         st.write(f"⚡ {item}")
     
     st.write("")
-    
-    # מנגנון הזנת סיסמה מוצפן לאישור איפוס
-    buyer_password = st.text_input("מחיקת הרשימה דורשת סיסמת קניין:", type="password", key="buyer_pwd_input")
+    buyer_password_input = st.text_input("מחיקת הרשימה דורשת סיסמת קניין:", type="password", key="buyer_pwd_input")
     
     if st.button("טעינה הושלמה! (מחיקת הרשימה) 🗑️"):
-        if buyer_password == "1234":
+        if buyer_password_input == BUYER_PASSWORD:
             db_data["shopping_list"] = []
             if save_all_data(db_data):
                 st.toast("הרשימה אופסה בהצלחה בענן! 🧹", icon="🗑️")
                 st.rerun()
             else:
                 st.success("הרשימה אופסה מקומית.")
-        elif buyer_password == "":
+        elif buyer_password_input == "":
             st.warning("נא להזין סיסמה כדי למחוק את הרשימה.")
         else:
             st.error("סיסמה שגויה! הרשימה לא נמחקה.")
@@ -388,29 +379,79 @@ else:
 
 st.divider()
 
-# --- מרכז בקרה, בדיקת חיבור ולוגים (למנהל המערכת) ---
-with st.expander("🛠️ מרכז בקרה, לוגים וחיבור לענן"):
-    st.markdown("### אבחון וניטור חיבור המערכת")
+# --- ממשק מנהל: עריכת קטלוג וקטגוריות דינמיות ---
+with st.expander("⚙️ ממשק מנהל (ניהול ועריכת הקטלוג)"):
+    st.markdown("### הוספה והסרה של מוצרים וקטגוריות")
+    st.info("💡 הזינו את סיסמת המנהל שהגדרתם ב-Secrets.")
+    admin_pwd = st.text_input("סיסמת מנהל:", type="password", key="admin_password_input")
     
-    if st.button("🔌 בדיקת חיבור מהירה לענן"):
-        test_success = save_all_data(db_data)
-        if test_success:
-            st.success("החיבור לענן תקין לחלוטין! (100% Uptime) ⚡")
-            log_event("SYSTEM", "בדיקת חיבור יזומה עברה בהצלחה.")
-        else:
-            st.error("החיבור לענן נכשל. המערכת פועלת כרגע במצב גיבוי מקומי יציב.")
-            log_event("SYSTEM", "בדיקת חיבור יזומה נכשלה.")
+    if admin_pwd == ADMIN_PASSWORD:
+        st.success("גישת מנהל אושרה! בחר פעולה:")
+        tab_add_cat, tab_edit_prod = st.tabs(["📁 ניהול קטגוריות", "📦 ניהול מוצרים בקטגוריה"])
+        
+        # 1. ניהול קטגוריות
+        with tab_add_cat:
+            new_cat_name = st.text_input("שם קטגוריה חדשה (כולל אמוג'י, למשל '🧼 מוצרי ניקיון'):", key="new_cat_input")
+            if st.button("➕ הוסף קטגוריה"):
+                if new_cat_name and new_cat_name not in db_data["categories"]:
+                    db_data["categories"][new_cat_name] = [{"name": "אחר", "emoji": "❓"}]
+                    if save_all_data(db_data):
+                        st.toast("קטגוריה נוספה!", icon="✅")
+                        st.rerun()
             
-    st.write("📋 לוגים של האפליקציה (app_logs.txt):")
+            st.markdown("---")
+            cat_to_del = st.selectbox("בחר קטגוריה למחיקה:", list(db_data["categories"].keys()), key="cat_del_sel")
+            if st.button("🗑️ מחק קטגוריה שלמה"):
+                if len(db_data["categories"]) > 1:
+                    del db_data["categories"][cat_to_del]
+                    if save_all_data(db_data):
+                        st.toast("קטגוריה נמחקה!", icon="🗑️")
+                        st.rerun()
+                else:
+                    st.error("לא ניתן למחוק את הקטגוריה האחרונה במערכת.")
+                    
+        # 2. ניהול מוצרים
+        with tab_edit_prod:
+            cat_to_edit = st.selectbox("בחר קטגוריה כדי לערוך את המוצרים שבה:", list(db_data["categories"].keys()), key="cat_edit_sel")
+            if cat_to_edit:
+                st.markdown("**➕ הוספת מוצר חדש:**")
+                c_name, c_emj, c_btn = st.columns([3, 1, 1])
+                new_p_name = c_name.text_input("שם המוצר:", key=f"p_name_{cat_to_edit}")
+                new_p_emoji = c_emj.text_input("אמוג'י:", key=f"p_emj_{cat_to_edit}")
+                
+                if c_btn.button("הוסף מוצר"):
+                    if new_p_name:
+                        # הוספת המוצר לפני ה"אחר" שתמיד יהיה בסוף אם אפשר
+                        new_item = {"name": new_p_name, "emoji": new_p_emoji or "📦"}
+                        db_data["categories"][cat_to_edit].insert(-1, new_item) # מכניס לפני האחרון
+                        if save_all_data(db_data):
+                            st.toast("מוצר חדש נוסף לקטגוריה!", icon="✅")
+                            st.rerun()
+                
+                st.markdown("---")
+                st.markdown("**🗑️ מוצרים קיימים (לחץ על הפח למחיקה):**")
+                for p in db_data["categories"][cat_to_edit]:
+                    col1, col2 = st.columns([4, 1])
+                    col1.markdown(f"{p['emoji']} {p['name']}")
+                    if p['name'] != "אחר": # לא מרשים למחוק את פריט החובה 'אחר'
+                        if col2.button("🗑️", key=f"del_{cat_to_edit}_{p['name']}"):
+                            db_data["categories"][cat_to_edit].remove(p)
+                            save_all_data(db_data)
+                            st.rerun()
+                    else:
+                        col2.markdown("🔒 **קבוע**")
+    elif admin_pwd != "":
+        st.error("סיסמה שגויה.")
+
+# --- אבחון ולוגים (מנהל מערכת ראשי) ---
+with st.expander("🩺 אבחון שרת ולוגים (למפתחים)"):
+    if st.button("🔌 בדיקת חיבור מהירה לענן"):
+        if save_all_data(db_data):
+            st.success("החיבור לענן תקין לחלוטין! (100% Uptime) ⚡")
+        else:
+            st.error("החיבור לענן נכשל.")
+            
+    st.write("📋 לוגים של האפליקציה:")
     if os.path.exists(LOG_FILE):
         with open(LOG_FILE, "r", encoding="utf-8") as f:
-            logs_content = f.read()
-        st.text_area("לוגים של השרת", logs_content, height=250, disabled=True)
-        
-        if st.button("🗑️ נקה לוגים"):
-            with open(LOG_FILE, "w", encoding="utf-8") as f:
-                f.write("")
-            st.success("קובץ הלוגים נוקה בהצלחה.")
-            st.rerun()
-    else:
-        st.info("אין לוגים זמינים כרגע.")
+            st.text_area("לוגים", f.read(), height=150, disabled=True)
