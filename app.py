@@ -252,7 +252,7 @@ DEFAULT_CATEGORIES = {
     "🥤 משקאות": [
         {"name": "קולה זירו", "emoji": "🖤"},
         {"name": "פחית קוקה קולה", "emoji": "❤️"},
-        {"name": "ספרייט", "emoji": "💚"},
+        {"name": "ספרייט זيرو", "emoji": "💚"},
         {"name": "מים מינרלים", "emoji": "💧"},
         {"name": "סודה קרה", "emoji": "🫧"},
         {"name": "קפסולות קפה", "emoji": "☕"},
@@ -333,7 +333,7 @@ for tab, (cat_name, items) in zip(tabs, CATEGORIES.items()):
                     st.write("")
                     st.button(
                         "הוסף ➕", 
-                        key=f"btn_{cat_name}_{item['name']}", 
+                        key=f"btn_{cat_name}_{idx}_{item['name']}", 
                         on_click=add_product_to_list, 
                         args=(item['name'], item['emoji']),
                         use_container_width=True
@@ -430,11 +430,11 @@ with st.expander("⚙️ ממשק מנהל (ניהול ועריכת הקטלוג
                 
                 st.markdown("---")
                 st.markdown("**🗑️ מוצרים קיימים (לחץ על הפח למחיקה):**")
-                for p in db_data["categories"][cat_to_edit]:
+                for p_idx, p in enumerate(db_data["categories"][cat_to_edit]):
                     col1, col2 = st.columns([4, 1])
                     col1.markdown(f"{p['emoji']} {p['name']}")
                     if p['name'] != "אחר": # לא מרשים למחוק את פריט החובה 'אחר'
-                        if col2.button("🗑️", key=f"del_{cat_to_edit}_{p['name']}"):
+                        if col2.button("🗑️", key=f"del_{cat_to_edit}_{p_idx}_{p['name']}"):
                             db_data["categories"][cat_to_edit].remove(p)
                             save_all_data(db_data)
                             st.rerun()
