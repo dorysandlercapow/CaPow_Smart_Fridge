@@ -230,63 +230,13 @@ def save_all_data(data):
         log_event("ERROR", f"עדכון הענן נכשל: {str(e)}")
         return False
 
-# קטלוג ברירת מחדל לאתחול (כולל קטגוריה בשרית ואפשרות "אחר" בכל קטגוריה)
-DEFAULT_CATEGORIES = {
-    "🥛 מוצרי חלב": [
-        {"name": "חלב רגיל 3%", "emoji": "🥛"},
-        {"name": "חלב דל שומן 1%", "emoji": "🥛"},
-        {"name": "חלב שיבולת שועל", "emoji": "🌾"},
-        {"name": "קוטג' 5%", "emoji": "🧀"},
-        {"name": "גבינה לבנה 5%", "emoji": "🥣"},
-        {"name": "גבינה צהובה", "emoji": "🧀"},
-        {"name": "יוגורט פרו", "emoji": "🥄"},
-        {"name": "אחר", "emoji": "❓"}
-    ],
-    "🥩 בשרי": [
-        {"name": "פסטרמה חזה הודו", "emoji": "🥓"},
-        {"name": "סלמי", "emoji": "🥩"},
-        {"name": "קבנוס", "emoji": "🌭"},
-        {"name": "נקניקיות", "emoji": "🌭"},
-        {"name": "אחר", "emoji": "❓"}
-    ],
-    "🥤 משקאות": [
-        {"name": "קולה זירו", "emoji": "🖤"},
-        {"name": "פחית קוקה קולה", "emoji": "❤️"},
-        {"name": "ספרייט זيرو", "emoji": "💚"},
-        {"name": "מים מינרלים", "emoji": "💧"},
-        {"name": "סודה קרה", "emoji": "🫧"},
-        {"name": "קפסולות קפה", "emoji": "☕"},
-        {"name": "אחר", "emoji": "❓"}
-    ],
-    "🍞 מאפייה": [
-        {"name": "לחם מחיטה מלאה", "emoji": "🍞"},
-        {"name": "לחם לבן פרוס", "emoji": "🍞"},
-        {"name": "פיתות טריות", "emoji": "🫓"},
-        {"name": "אחר", "emoji": "❓"}
-    ],
-    "🥨 נשנושים ומתוקים": [
-        {"name": "במבה", "emoji": "🥜"},
-        {"name": "ביסלי גריל", "emoji": "🥨"},
-        {"name": "תפוצ'יפס", "emoji": "🥔"},
-        {"name": "שוקולד פרה", "emoji": "🍫"},
-        {"name": "אחר", "emoji": "❓"}
-    ],
-    "🍎 ירקות ופירות": [
-        {"name": "עגבניות", "emoji": "🍅"},
-        {"name": "מלפפונים", "emoji": "🥒"},
-        {"name": "בננות", "emoji": "🍌"},
-        {"name": "תפוחים", "emoji": "🍏"},
-        {"name": "אחר", "emoji": "❓"}
-    ]
-}
-
 # טעינת המידע החי מהענן
 db_data = load_all_data()
 shopping_list = db_data.get("shopping_list", [])
 
-# אתחול קטגוריות לענן אם הן עדיין לא קיימות
-if "categories" not in db_data or not db_data["categories"]:
-    db_data["categories"] = DEFAULT_CATEGORIES
+# אם אין קטגוריות בענן, נאתחל מבנה ריק (ללא רשימות קשיחות בקוד!)
+if "categories" not in db_data:
+    db_data["categories"] = {}
     save_all_data(db_data)
 
 CATEGORIES = db_data["categories"]
@@ -304,8 +254,19 @@ def add_product_to_list(name, emoji):
     if note:
         final_item += f" ({note})"
         
-    if final_item not in shopping_list:
-        shopping_list.append(final_item)
+    # בדיקת כפילויות התומכת גם בפריטים ישנים (מחרוזות) וגם בחדשים (מילונים עם תאריך)
+    exists = False
+    for item in shopping_list:
+        item_name = item["item"] if isinstance(item, dict) else item
+        if item_name == final_item:
+            exists = True
+            break
+            
+    if not exists:
+        # יצירת חותמת זמן של התאריך הנוכחי
+        current_date = datetime.datetime.now().strftime("%d/%m/%Y")
+        shopping_list.append({"item": final_item, "date": current_date})
+        
         db_data["shopping_list"] = shopping_list
         if save_all_data(db_data):
             st.toast(f"התווסף בהצלחה: {final_item} ⚡", icon="✅")
@@ -319,25 +280,28 @@ def add_product_to_list(name, emoji):
 # --- 1. אזור בחירת מוצרים ---
 st.markdown("### 1. לחצו על המוצר שחסר במקרר: 👇")
 
-# יצירת לשוניות חלוקה מבוססות קטגוריות דינמיות מהענן
-tabs = st.tabs(list(CATEGORIES.keys()))
-
-for tab, (cat_name, items) in zip(tabs, CATEGORIES.items()):
-    with tab:
-        cols = st.columns(3)
-        for idx, item in enumerate(items):
-            col = cols[idx % 3]
-            with col:
-                with st.container(border=True):
-                    st.markdown(f"<div style='text-align: center; font-size: 1.15rem; font-weight: bold;'>{item['emoji']} {item['name']}</div>", unsafe_allow_html=True)
-                    st.write("")
-                    st.button(
-                        "הוסף ➕", 
-                        key=f"btn_{cat_name}_{idx}_{item['name']}", 
-                        on_click=add_product_to_list, 
-                        args=(item['name'], item['emoji']),
-                        use_container_width=True
-                    )
+if not CATEGORIES:
+    st.info("הקטלוג כרגע ריק! 🛠️ מנהל המערכת, היכנסו לפאנל הניהול למטה כדי לבנות את קטגוריות המוצרים שלכם.")
+else:
+    # יצירת לשוניות חלוקה מבוססות קטגוריות דינמיות מהענן
+    tabs = st.tabs(list(CATEGORIES.keys()))
+    
+    for tab, (cat_name, items) in zip(tabs, CATEGORIES.items()):
+        with tab:
+            cols = st.columns(3)
+            for idx, item in enumerate(items):
+                col = cols[idx % 3]
+                with col:
+                    with st.container(border=True):
+                        st.markdown(f"<div style='text-align: center; font-size: 1.15rem; font-weight: bold;'>{item['emoji']} {item['name']}</div>", unsafe_allow_html=True)
+                        st.write("")
+                        st.button(
+                            "הוסף ➕", 
+                            key=f"btn_{cat_name}_{idx}_{item['name']}", 
+                            on_click=add_product_to_list, 
+                            args=(item['name'], item['emoji']),
+                            use_container_width=True
+                        )
 
 st.write("")
 st.divider()
@@ -356,24 +320,44 @@ st.divider()
 st.subheader("רשימת הקניות הנוכחית 🛒")
 
 if shopping_list:
-    for item in shopping_list:
-        st.write(f"⚡ {item}")
-    
-    st.write("")
-    buyer_password_input = st.text_input("מחיקת הרשימה דורשת סיסמת קניין:", type="password", key="buyer_pwd_input")
-    
-    if st.button("טעינה הושלמה! (מחיקת הרשימה) 🗑️"):
-        if buyer_password_input == BUYER_PASSWORD:
-            db_data["shopping_list"] = []
-            if save_all_data(db_data):
-                st.toast("הרשימה אופסה בהצלחה בענן! 🧹", icon="🗑️")
-                st.rerun()
-            else:
-                st.success("הרשימה אופסה מקומית.")
-        elif buyer_password_input == "":
-            st.warning("נא להזין סיסמה כדי למחוק את הרשימה.")
+    # יצירת רשימה אחידה (תמיכה לאחור במוצרים ישנים שנשמרו בלי תאריך)
+    display_list = []
+    for i in shopping_list:
+        if isinstance(i, str):
+            display_list.append({"item": i, "date": "לפני העדכון"})
         else:
-            st.error("סיסמה שגויה! הרשימה לא נמחקה.")
+            display_list.append(i)
+
+    # שימוש ב-form כדי לאפשר סימון של כמה מוצרים בלי לרענן את המסך בכל לחיצה
+    with st.form("buyer_cart_form"):
+        st.markdown("**סמנו ב-V את המוצרים שקניתם/אספתם:** (מה שלא יסומן יישאר בעגלה)")
+        
+        checked_items = []
+        for idx, prod in enumerate(display_list):
+            # יצירת תיבת סימון (צ'קבוקס) לכל מוצר עם התאריך שבו התבקש
+            is_checked = st.checkbox(f"{prod['item']} 📅 [נוסף ב: {prod['date']}]", key=f"chk_prod_{idx}")
+            checked_items.append(is_checked)
+        
+        st.write("")
+        buyer_password_input = st.text_input("עדכון הרשימה דורש סיסמת קניין:", type="password", key="buyer_pwd_input")
+        
+        submit_update = st.form_submit_button("עדכן עגלה (מחק את מה שסומן ב-V) 🗑️")
+        
+        if submit_update:
+            if buyer_password_input == BUYER_PASSWORD:
+                # משאירים ברשימה רק את המוצרים ש*לא* סומנו ב-V
+                new_shopping_list = [prod for i, prod in enumerate(display_list) if not checked_items[i]]
+                
+                db_data["shopping_list"] = new_shopping_list
+                if save_all_data(db_data):
+                    st.toast("הרשימה עודכנה בהצלחה! 🧹", icon="🗑️")
+                    st.rerun()
+                else:
+                    st.success("הרשימה עודכנה מקומית.")
+            elif buyer_password_input == "":
+                st.warning("נא להזין סיסמה כדי לעדכן את הרשימה.")
+            else:
+                st.error("סיסמה שגויה! הרשימה לא התעדכנה.")
 else:
     st.info("אין חוסרים. הרובוטים יכולים להמשיך לנוע! 🤖")
 
@@ -400,46 +384,49 @@ with st.expander("⚙️ ממשק מנהל (ניהול ועריכת הקטלוג
                         st.rerun()
             
             st.markdown("---")
-            cat_to_del = st.selectbox("בחר קטגוריה למחיקה:", list(db_data["categories"].keys()), key="cat_del_sel")
-            if st.button("🗑️ מחק קטגוריה שלמה"):
-                if len(db_data["categories"]) > 1:
+            if db_data["categories"]:
+                cat_to_del = st.selectbox("בחר קטגוריה למחיקה:", list(db_data["categories"].keys()), key="cat_del_sel")
+                if st.button("🗑️ מחק קטגוריה שלמה"):
                     del db_data["categories"][cat_to_del]
                     if save_all_data(db_data):
                         st.toast("קטגוריה נמחקה!", icon="🗑️")
                         st.rerun()
-                else:
-                    st.error("לא ניתן למחוק את הקטגוריה האחרונה במערכת.")
+            else:
+                st.info("אין קטגוריות למחיקה.")
                     
         # 2. ניהול מוצרים
         with tab_edit_prod:
-            cat_to_edit = st.selectbox("בחר קטגוריה כדי לערוך את המוצרים שבה:", list(db_data["categories"].keys()), key="cat_edit_sel")
-            if cat_to_edit:
-                st.markdown("**➕ הוספת מוצר חדש:**")
-                c_name, c_emj, c_btn = st.columns([3, 1, 1])
-                new_p_name = c_name.text_input("שם המוצר:", key=f"p_name_{cat_to_edit}")
-                new_p_emoji = c_emj.text_input("אמוג'י:", key=f"p_emj_{cat_to_edit}")
-                
-                if c_btn.button("הוסף מוצר"):
-                    if new_p_name:
-                        # הוספת המוצר לפני ה"אחר" שתמיד יהיה בסוף אם אפשר
-                        new_item = {"name": new_p_name, "emoji": new_p_emoji or "📦"}
-                        db_data["categories"][cat_to_edit].insert(-1, new_item) # מכניס לפני האחרון
-                        if save_all_data(db_data):
-                            st.toast("מוצר חדש נוסף לקטגוריה!", icon="✅")
-                            st.rerun()
-                
-                st.markdown("---")
-                st.markdown("**🗑️ מוצרים קיימים (לחץ על הפח למחיקה):**")
-                for p_idx, p in enumerate(db_data["categories"][cat_to_edit]):
-                    col1, col2 = st.columns([4, 1])
-                    col1.markdown(f"{p['emoji']} {p['name']}")
-                    if p['name'] != "אחר": # לא מרשים למחוק את פריט החובה 'אחר'
-                        if col2.button("🗑️", key=f"del_{cat_to_edit}_{p_idx}_{p['name']}"):
-                            db_data["categories"][cat_to_edit].remove(p)
-                            save_all_data(db_data)
-                            st.rerun()
-                    else:
-                        col2.markdown("🔒 **קבוע**")
+            if db_data["categories"]:
+                cat_to_edit = st.selectbox("בחר קטגוריה כדי לערוך את המוצרים שבה:", list(db_data["categories"].keys()), key="cat_edit_sel")
+                if cat_to_edit:
+                    st.markdown("**➕ הוספת מוצר חדש:**")
+                    c_name, c_emj, c_btn = st.columns([3, 1, 1])
+                    new_p_name = c_name.text_input("שם המוצר:", key=f"p_name_{cat_to_edit}")
+                    new_p_emoji = c_emj.text_input("אמוג'י:", key=f"p_emj_{cat_to_edit}")
+                    
+                    if c_btn.button("הוסף מוצר"):
+                        if new_p_name:
+                            # הוספת המוצר לפני ה"אחר" שתמיד יהיה בסוף אם אפשר
+                            new_item = {"name": new_p_name, "emoji": new_p_emoji or "📦"}
+                            db_data["categories"][cat_to_edit].insert(-1, new_item) # מכניס לפני האחרון
+                            if save_all_data(db_data):
+                                st.toast("מוצר חדש נוסף לקטגוריה!", icon="✅")
+                                st.rerun()
+                    
+                    st.markdown("---")
+                    st.markdown("**🗑️ מוצרים קיימים (לחץ על הפח למחיקה):**")
+                    for p_idx, p in enumerate(db_data["categories"][cat_to_edit]):
+                        col1, col2 = st.columns([4, 1])
+                        col1.markdown(f"{p['emoji']} {p['name']}")
+                        if p['name'] != "אחר": # לא מרשים למחוק את פריט החובה 'אחר'
+                            if col2.button("🗑️", key=f"del_{cat_to_edit}_{p_idx}_{p['name']}"):
+                                db_data["categories"][cat_to_edit].remove(p)
+                                save_all_data(db_data)
+                                st.rerun()
+                        else:
+                            col2.markdown("🔒 **קבוע**")
+            else:
+                st.info("נא להוסיף קטגוריה ראשונה תחת 'ניהול קטגוריות' לפני הוספת מוצרים.")
     elif admin_pwd != "":
         st.error("סיסמה שגויה.")
 
